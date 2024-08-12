@@ -1,5 +1,7 @@
 # The David Game
 
+Features of Construction: Swift, Xcode, Apple PencilKit, Multipeer Connectivity, Google Firebase, Google AdMob <hr>
+
 Shown to us by our uncle David, the David Game is my family's favorite pen-and-paper pastime at gatherings.
 It's best played with a group of 4+ people, sitting around a table. Each player starts with a sheet of paper that has seven sections: four for writing and three for drawing. <br><br>
 Each player starts by writing a sentence that can be drawn, ideally something creative and obscure.
