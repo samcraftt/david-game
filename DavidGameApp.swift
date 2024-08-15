@@ -37,7 +37,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                 @unknown default:
                     print("Unknown")
                 }
-                // Update UserDefaults to indicate we've requested authorization
                 UserDefaults.standard.set(true, forKey: "trackingRequested")
             }
         }
@@ -140,22 +139,23 @@ struct ContentView: View {
 struct BannerView: UIViewRepresentable {
     func makeUIView(context: Context) -> GADBannerView {
         let banner = GADBannerView(adSize: GADAdSizeBanner)
-        banner.adUnitID = "ca-app-pub-6149836240028020/1409106664"
+        banner.adUnitID = "ca-app-pub-3940256099942544/2435281174"
         banner.rootViewController = getRootViewController()
-        if #available(iOS 17.5, *) {
+        if #available(iOS 14, *) {
             ATTrackingManager.requestTrackingAuthorization { status in
                 DispatchQueue.main.async {
-                    banner.load(GADRequest())
+                    let request = GADRequest()
+                    banner.load(request)
                 }
             }
         } else {
-            banner.load(GADRequest())
+            let request = GADRequest()
+            banner.load(request)
         }
         return banner
     }
     func updateUIView(_ uiView: GADBannerView, context: Context) {}
     private func getRootViewController() -> UIViewController? {
-        // Get the root view controller from the scene
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let window = windowScene.windows.first(where: { $0.isKeyWindow }) else {
             return nil
@@ -168,7 +168,7 @@ struct BannerView: UIViewRepresentable {
 
 struct HostGameView: View {
     @ObservedObject var gameState: GameState
-    @State private var pin = Int.random(in: 100000...999999)
+    @State private var pin = Int.random(in: 1000...9999)
     @State private var isWaitingRoomPresented = false
     @State private var playerName = ""
     var body: some View {
@@ -176,7 +176,7 @@ struct HostGameView: View {
             Text("Host Game")
                 .font(.largeTitle)
                 .padding()
-            Text("Game PIN: \(String(format: "%06d", pin))")
+            Text("Game PIN: \(String(format: "%04d", pin))")
                 .font(.title)
                 .padding()
             TextField("Your Name", text: $playerName)
@@ -187,7 +187,7 @@ struct HostGameView: View {
                 gameState.hostGame(pin: pin, playerName: playerName)
                 isWaitingRoomPresented = true
             }) {
-                Text("Create Game")
+                Text("Create Waiting Room")
                     .font(.title)
                     .padding()
                     .background(Color.red)
@@ -246,6 +246,10 @@ struct JoinGameView: View {
                             // Failure: Player with the same name already in the game
                             showError = true
                             errorMessage = "A player with that name is already in the game."
+                        case 4:
+                            // Failure: Player with the same name already in the game
+                            showError = true
+                            errorMessage = "Game in progress."
                         default:
                             // Handle any unexpected result codes
                             showError = true
@@ -286,7 +290,7 @@ struct WaitingRoomView: View {
             Text("Waiting Room")
                 .font(.largeTitle)
                 .padding()
-            Text("Game PIN: \(String(format: "%06d", pin))")
+            Text("Game PIN: \(String(format: "%04d", pin))")
                 .padding()
             
             List(gameState.players, id: \.self) { player in
@@ -332,6 +336,7 @@ struct GameView: View {
     let playerName: String
     @State private var inputText = ""
     @State private var currentDrawing: UIImage?
+    @State private var canvasView = PKCanvasView()
     var body: some View {
         VStack {
             if let task = gameState.currentTasks[playerName] {
@@ -341,19 +346,28 @@ struct GameView: View {
                     case .drawPicture:
                         drawPictureView(for: playerName, rootPlayer: task.rootPlayer, previousContent: task.previousContent)
                     default:
-                        Text("Waiting for other players...")
-                                .font(.title)
-                                .padding()
+                        if let currentPlayerIndex = gameState.players.firstIndex(of: playerName) {
+                            let previousPlayerIndex = (currentPlayerIndex - 1 + gameState.players.count) % gameState.players.count
+                            let previousPlayer = gameState.players[previousPlayerIndex]
+                            if gameState.currentTasks[previousPlayer]?.taskType != .waiting {
+                                Text("Waiting for \(previousPlayer) to complete their task...")
+                                    .font(.title)
+                                    .padding()
+                            } else {
+                                Text("Waiting for other players...")
+                                    .font(.title)
+                                    .padding()
+                            }
+                        }
                 }
-            }
-            else {
+            } else {
                 Text("Waiting for other players...")
                     .font(.title)
                     .padding()
             }
         }
         .fullScreenCover(isPresented: $gameState.complete) {
-            ResultsView(results: gameState.results) {
+            ResultsView(results: gameState.results, players: gameState.players) {
                 gameState.completelyResetGame()
             }
         }
@@ -380,6 +394,15 @@ struct GameView: View {
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .font(.title)
                 .padding()
+            if let currentPlayerIndex = gameState.players.firstIndex(of: player) {
+                let nextPlayerIndex = (currentPlayerIndex + 1) % gameState.players.count
+                let nextPlayer = gameState.players[nextPlayerIndex]
+                if gameState.results[rootPlayer]?.count == 6 {
+                    Text("Submit this sentence to complete \(rootPlayer)'s story!")
+                } else {
+                    Text("Pass your sentence to \(nextPlayer)!")
+                }
+            }
             Button(action: {
                 gameState.submitTask(for: player, rootPlayer: rootPlayer, task: .writeSentence, content: inputText)
                 inputText = ""
@@ -401,31 +424,52 @@ struct GameView: View {
                     let previousPlayerIndex = (currentPlayerIndex - 1 + gameState.players.count) % gameState.players.count
                     let previousPlayer = gameState.players[previousPlayerIndex]
                     Text("\(previousPlayer)'s sentence:")
-                    Text(previousContent)
-                        .font(.title2)
-                        .padding()
+                    ScrollView {
+                        Text(previousContent)
+                            .font(.title2)
+                            .padding()
+                    }
+                    .frame(height: 100)
                     Text("Draw this sentence. No words allowed!")
                 }
             }
-            DrawingView(currentDrawing: $currentDrawing)
+            let drawingView = DrawingView(currentDrawing: $currentDrawing, canvasView: canvasView)
+            drawingView
                 .frame(height: 300)
                 .padding()
                 .border(Color.gray, width: 2)
-            Button(action: {
-                if let drawing = currentDrawing {
-                    let drawingData = drawing.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
-                    gameState.submitTask(for: player, rootPlayer: rootPlayer, task: .drawPicture, content: drawingData)
-                    currentDrawing = nil
+            HStack {
+                Button(action: {
+                    drawingView.undo()
+                }) {
+                    Image(systemName: "arrow.uturn.backward")
+                    Text("Undo")
                 }
-            }) {
-                Text("Submit")
-                    .font(.title)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
+                .padding()
+                .background(Color.gray.opacity(0.2))
+                .cornerRadius(10)
+                Spacer()
+                Button(action: {
+                    if let drawing = currentDrawing {
+                        let drawingData = drawing.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
+                        gameState.submitTask(for: player, rootPlayer: rootPlayer, task: .drawPicture, content: drawingData)
+                        canvasView.drawing = PKDrawing()
+                    }
+                }) {
+                    Text("Submit")
+                        .font(.title)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
             }
             .padding()
+            if let currentPlayerIndex = gameState.players.firstIndex(of: player) {
+                let nextPlayerIndex = (currentPlayerIndex + 1) % gameState.players.count
+                let nextPlayer = gameState.players[nextPlayerIndex]
+                Text("Pass your drawing to \(nextPlayer)!")
+            }
         }
     }
 }
@@ -434,8 +478,12 @@ struct GameView: View {
 
 struct DrawingView: UIViewRepresentable {
     @Binding var currentDrawing: UIImage?
+    let canvasView: PKCanvasView
+    init(currentDrawing: Binding<UIImage?>, canvasView: PKCanvasView) {
+        self._currentDrawing = currentDrawing
+        self.canvasView = canvasView
+    }
     func makeUIView(context: Context) -> PKCanvasView {
-        let canvasView = PKCanvasView()
         canvasView.tool = PKInkingTool(.pen, color: .gray, width: 10)
         canvasView.drawingPolicy = .anyInput
         canvasView.delegate = context.coordinator
@@ -457,12 +505,18 @@ struct DrawingView: UIViewRepresentable {
             parent.currentDrawing = image
         }
     }
+    func undo() {
+        if canvasView.undoManager?.canUndo ?? false {
+            canvasView.undoManager?.undo()
+        }
+    }
 }
 
 // ResultsView
 
 struct ResultsView: View {
     var results: [String: [String]]
+    var players: [String]
     @State private var currentPlayerIndex = 0
     @State private var currentElementIndex = 0
     @State private var timerPublisher = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
@@ -528,13 +582,16 @@ struct ResultsView: View {
             Text("\(player)'s Story")
                 .font(.title2)
                 .padding(.horizontal)
+            let playerIndex = players.firstIndex(of: player)
             ForEach(0...currentElementIndex, id: \.self) { index in
                 if index % 2 == 0 {
-                    Text(results[player]![index])
+                    Text("\(players[(playerIndex! + index) % players.count]): \(results[player]![index])")
                         .padding()
                         .background(Color.gray.opacity(0.2))
                         .cornerRadius(10)
                 } else {
+                    Text("\(players[(playerIndex! + index) % players.count]): ")
+                        .padding()
                     imageView(for: results[player]![index])
                 }
             }
@@ -639,6 +696,10 @@ class GameState: ObservableObject {
                     completion(3)  // Player with the same name already exists
                     return
                 }
+            }
+            if let inProgress = document.data()?["isGameStarted"] as? Bool, inProgress {
+                completion(4) // Game is already in progress
+                return
             }
             let updateData: [String: Any] = [
                 "players": FieldValue.arrayUnion([playerName]),
