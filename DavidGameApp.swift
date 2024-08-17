@@ -16,7 +16,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         let providerFactory = DeviceCheckProviderFactory()
         AppCheck.setAppCheckProviderFactory(providerFactory)
         // Request tracking authorization after a short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             self.requestTrackingAuthorization()
         }
         return true
@@ -55,91 +55,12 @@ class UserDefaultsManager {
     }
 }
 
-// DavidGameApp
-
-@main
-struct DavidGameApp: App {
-    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-        }
-    }
-}
-
-// ContentView
-
-struct ContentView: View {
-    @StateObject private var gameState = GameState()
-    @State private var showingJoinGame = false
-    @State private var showingHostGame = false
-    @State private var isGameActive = false
-    var body: some View {
-        VStack {
-            Text("The David Game")
-                .font(.largeTitle)
-                .padding()
-            Image("davidgamecircle")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 250)
-                .padding()
-            Button(action: {
-                showingHostGame = true
-            }) {
-                Text("Host Game")
-                    .font(.title)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-            }
-            .padding()
-            .sheet(isPresented: $showingHostGame) {
-                HostGameView(gameState: gameState)
-            }
-            Button(action: {
-                showingJoinGame = true
-            }) {
-                Text("Join Game")
-                    .font(.title)
-                    .padding()
-                    .background(Color.green)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-            }
-            .padding()
-            .sheet(isPresented: $showingJoinGame) {
-                JoinGameView(gameState: gameState)
-            }
-            .onChange(of: gameState.isGameStarted) { _, newValue in
-                isGameActive = newValue
-            }
-            .onChange(of: gameState.shouldReturnToHome) { _, newValue in
-                if newValue {
-                    isGameActive = false
-                    showingHostGame = false
-                    showingJoinGame = false
-                    gameState.shouldReturnToHome = false
-                }
-            }
-            BannerView()
-                .frame(height: 50)
-                .background(Color.gray.opacity(0.2))
-        }
-    }
-}
-
-#Preview {
-    ContentView()
-}
-
 // BannerView
 
 struct BannerView: UIViewRepresentable {
     func makeUIView(context: Context) -> GADBannerView {
         let banner = GADBannerView(adSize: GADAdSizeBanner)
-        banner.adUnitID = "ca-app-pub-3940256099942544/2435281174"
+        banner.adUnitID = "ADMOB_BANNER_ID"
         banner.rootViewController = getRootViewController()
         if #available(iOS 14, *) {
             ATTrackingManager.requestTrackingAuthorization { status in
@@ -164,15 +85,144 @@ struct BannerView: UIViewRepresentable {
     }
 }
 
+// DavidGameApp
+
+@main
+struct DavidGameApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    var body: some Scene {
+        WindowGroup {
+            ParentView()
+        }
+    }
+}
+
+// ViewManager
+
+class ViewManager: ObservableObject {
+    @Published var currentView: GameView = .home
+    @Published var playerName: String = ""
+    @Published var pin: Int = 0
+    @Published var resultsCopy: [String: [String]] = [:]
+    @Published var playersCopy: [String] = []
+    @Published var anyInactive: Bool = false
+    enum GameView {
+        case home
+        case host
+        case join
+        case waitingRoom
+        case game
+        case results
+    }
+    func moveToView(_ view: GameView) {
+        currentView = view
+    }
+    func resetGame() {
+        currentView = .home
+        playerName = ""
+        pin = 0
+        resultsCopy = [:]
+        playersCopy = []
+        anyInactive = false
+    }
+}
+
+// ParentView
+
+struct ParentView: View {
+    @StateObject private var viewManager = ViewManager()
+    @StateObject private var gameState = GameState()
+    var body: some View {
+        switch viewManager.currentView {
+        case .home:
+            HomeView(gameState: gameState)
+                .environmentObject(viewManager)
+        case .host:
+            HostGameView(gameState: gameState)
+                .environmentObject(viewManager)
+        case .join:
+            JoinGameView(gameState: gameState)
+                .environmentObject(viewManager)
+        case .waitingRoom:
+            WaitingRoomView(gameState: gameState)
+                .environmentObject(viewManager)
+        case .game:
+            GameView(gameState: gameState)
+                .environmentObject(viewManager)
+        case .results:
+            ResultsView(gameState: gameState)
+                .environmentObject(viewManager)
+        }
+    }
+}
+
+// HomeView
+
+struct HomeView: View {
+    @EnvironmentObject var viewManager: ViewManager
+    @ObservedObject var gameState: GameState
+    var body: some View {
+        VStack {
+            Text("The David Game")
+                .font(.largeTitle)
+                .padding()
+            Image("davidgamecircle")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 250)
+                .padding()
+            Button(action: {
+                viewManager.moveToView(.host)
+            }) {
+                Text("Host Game")
+                    .font(.title)
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+            }
+            .padding()
+            Button(action: {
+                viewManager.moveToView(.join)
+            }) {
+                Text("Join Game")
+                    .font(.title)
+                    .padding()
+                    .background(Color.green)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+            }
+            .padding()
+            BannerView()
+                .frame(height: 50)
+                .background(Color.gray.opacity(0.2))
+        }
+    }
+}
+
 // HostGameView
 
 struct HostGameView: View {
+    @EnvironmentObject var viewManager: ViewManager
     @ObservedObject var gameState: GameState
     @State private var pin = Int.random(in: 1000...9999)
-    @State private var isWaitingRoomPresented = false
     @State private var playerName = ""
+    @State private var showError = false
+    @State private var errorMessage = ""
+    @State private var isButtonDisabled = false
     var body: some View {
         VStack {
+            Button(action: {
+                viewManager.moveToView(.home)
+            }) {
+                Text("Return to Home")
+                    .padding()
+                    .background(Color.purple)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+            }
+            .padding()
+            Spacer()
             Text("Host Game")
                 .font(.largeTitle)
                 .padding()
@@ -183,9 +233,19 @@ struct HostGameView: View {
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .font(.title)
                 .padding()
+            Spacer()
             Button(action: {
-                gameState.hostGame(pin: pin, playerName: playerName)
-                isWaitingRoomPresented = true
+                isButtonDisabled = true
+                gameState.hostGame(pin: pin, playerName: playerName) { result in
+                    if result == 0 {
+                        viewManager.playerName = playerName
+                        viewManager.pin = pin
+                        viewManager.moveToView(.waitingRoom)
+                    } else {
+                        showError(message: "An unknown error occurred.")
+                    }
+                }
+                isButtonDisabled = false
             }) {
                 Text("Create Waiting Room")
                     .font(.title)
@@ -195,28 +255,41 @@ struct HostGameView: View {
                     .cornerRadius(10)
             }
             .padding()
-        }
-        .fullScreenCover(isPresented: $isWaitingRoomPresented) {
-            WaitingRoomView(gameState: gameState, playerName: playerName, pin: pin)
+            .disabled(isButtonDisabled)
+            .alert(isPresented: $showError) {
+                Alert(title: Text("Failed to host game."), message: Text(errorMessage), dismissButton: .default(Text("OK")))
+            }
         }
     }
-}
-
-#Preview {
-    HostGameView(gameState: GameState())
+    private func showError(message: String) {
+        errorMessage = message
+        showError = true
+    }
 }
 
 // JoinGameView
 
 struct JoinGameView: View {
+    @EnvironmentObject var viewManager: ViewManager
     @ObservedObject var gameState: GameState
     @State private var pin = ""
-    @State private var isWaitingRoomPresented = false
+    @State private var playerName = ""
     @State private var showError = false
     @State private var errorMessage = ""
-    @State private var playerName = ""
+    @State private var isButtonDisabled = false
     var body: some View {
         VStack {
+            Button(action: {
+                viewManager.moveToView(.home)
+            }) {
+                Text("Return to Home")
+                    .padding()
+                    .background(Color.purple)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+            }
+            .padding()
+            Spacer()
             Text("Join Game")
                 .font(.largeTitle)
                 .padding()
@@ -228,34 +301,28 @@ struct JoinGameView: View {
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .font(.title)
                 .padding()
+            Spacer()
             Button(action: {
+                isButtonDisabled = true
                 gameState.joinGame(pin: Int(pin) ?? 0, playerName: playerName) { result in
                     switch result {
-                        case 0:
-                            // Success: Game joined successfully
-                            isWaitingRoomPresented = true
-                        case 1:
-                            // Failure: Document doesn't exist (wrong pin)
-                            showError = true
-                            errorMessage = "Invalid PIN."
-                        case 2:
-                            // Failure: Game is at max capacity
-                            showError = true
-                            errorMessage = "The game is full."
-                        case 3:
-                            // Failure: Player with the same name already in the game
-                            showError = true
-                            errorMessage = "A player with that name is already in the game."
-                        case 4:
-                            // Failure: Player with the same name already in the game
-                            showError = true
-                            errorMessage = "Game in progress."
-                        default:
-                            // Handle any unexpected result codes
-                            showError = true
-                            errorMessage = "An unknown error occurred."
+                    case 0:
+                        viewManager.playerName = playerName
+                        viewManager.pin = Int(pin) ?? 0
+                        viewManager.moveToView(.waitingRoom)
+                    case 1:
+                        showError(message: "Invalid PIN.")
+                    case 2:
+                        showError(message: "The game is full.")
+                    case 3:
+                        showError(message: "A player with that name is already in the game.")
+                    case 4:
+                        showError(message: "Game in progress.")
+                    default:
+                        showError(message: "An unknown error occurred.")
                     }
                 }
+                isButtonDisabled = false
             }) {
                 Text("Join")
                     .font(.title)
@@ -265,39 +332,37 @@ struct JoinGameView: View {
                     .cornerRadius(10)
             }
             .padding()
-            .sheet(isPresented: $isWaitingRoomPresented) {
-                WaitingRoomView(gameState: gameState, playerName: playerName, pin: Int(pin) ?? 0)
-            }
+            .disabled(isButtonDisabled)
             .alert(isPresented: $showError) {
                 Alert(title: Text("Failed to join game."), message: Text(errorMessage), dismissButton: .default(Text("OK")))
             }
         }
     }
-}
-
-#Preview {
-    JoinGameView(gameState: GameState())
+    private func showError(message: String) {
+        errorMessage = message
+        showError = true
+    }
 }
 
 // WaitingRoomView
 
 struct WaitingRoomView: View {
+    @EnvironmentObject var viewManager: ViewManager
     @ObservedObject var gameState: GameState
-    let playerName: String
-    let pin: Int
+    @State private var isButtonDisabled = false
     var body: some View {
         VStack {
             Text("Waiting Room")
                 .font(.largeTitle)
                 .padding()
-            Text("Game PIN: \(String(format: "%04d", pin))")
+            Text("Game PIN: \(String(format: "%04d", viewManager.pin))")
                 .padding()
-            
             List(gameState.players, id: \.self) { player in
                 Text(player)
             }
-            if playerName == gameState.host && gameState.players.count >= 2 && gameState.players.count <= 10 {
+            if viewManager.playerName == gameState.host && gameState.players.count >= 2 && gameState.players.count <= 10 {
                 Button(action: {
+                    isButtonDisabled = true
                     gameState.startGame()
                 }) {
                     Text("Start Game")
@@ -308,55 +373,57 @@ struct WaitingRoomView: View {
                         .cornerRadius(10)
                 }
                 .padding()
+                .disabled(isButtonDisabled)
             } else if gameState.players.count < 10 {
                 Text("Waiting for more players...")
                     .font(.title2)
                     .padding()
             }
             if gameState.players.count == 10 {
-                Text("10 players - Game at capacity.")
+                Text("10 Players - Game at capacity.")
                     .font(.title2)
                     .padding()
             }
         }
-        .fullScreenCover(isPresented: $gameState.isGameStarted) {
-            GameView(gameState: gameState, playerName: playerName)
+        .onReceive(gameState.$isGameStarted) { started in
+            if started {
+                viewManager.moveToView(.game)
+            }
         }
     }
-}
-
-#Preview {
-    WaitingRoomView(gameState: GameState(), playerName: "Player 1", pin: 123456)
 }
 
 // GameView
 
 struct GameView: View {
+    @EnvironmentObject var viewManager: ViewManager
     @ObservedObject var gameState: GameState
-    let playerName: String
     @State private var inputText = ""
     @State private var currentDrawing: UIImage?
     @State private var canvasView = PKCanvasView()
+    @State private var isButtonDisabled = false
     var body: some View {
         VStack {
-            if let task = gameState.currentTasks[playerName] {
+            if let task = gameState.currentTasks[viewManager.playerName] {
                 switch task.taskType {
                     case .writeSentence:
-                        writeSentenceView(for: playerName, rootPlayer: task.rootPlayer, previousContent: task.previousContent)
+                    writeSentenceView(for: viewManager.playerName, rootPlayer: task.rootPlayer, previousContent: task.previousContent)
                     case .drawPicture:
-                        drawPictureView(for: playerName, rootPlayer: task.rootPlayer, previousContent: task.previousContent)
+                    drawPictureView(for: viewManager.playerName, rootPlayer: task.rootPlayer, previousContent: task.previousContent)
                     default:
-                        if let currentPlayerIndex = gameState.players.firstIndex(of: playerName) {
-                            let previousPlayerIndex = (currentPlayerIndex - 1 + gameState.players.count) % gameState.players.count
-                            let previousPlayer = gameState.players[previousPlayerIndex]
-                            if gameState.currentTasks[previousPlayer]?.taskType != .waiting {
-                                Text("Waiting for \(previousPlayer) to complete their task...")
-                                    .font(.title)
-                                    .padding()
-                            } else {
-                                Text("Waiting for other players...")
-                                    .font(.title)
-                                    .padding()
+                    if let currentPlayerIndex = gameState.players.firstIndex(of: viewManager.playerName) {
+                        let previousPlayerIndex = (currentPlayerIndex - 1 + gameState.players.count) % gameState.players.count
+                        let previousPlayer = gameState.players[previousPlayerIndex]
+                        if gameState.currentTasks[previousPlayer]?.taskType != .waiting {
+                            Text("Waiting for \(previousPlayer) to complete their task...")
+                                .font(.title)
+                                .padding()
+                        } else {
+                            Text("Waiting for other players...")
+                                .font(.title)
+                                .padding()
+                            Text("Don't tell \(previousPlayer) to hurry up, because they're also waiting...")
+                                .padding()
                             }
                         }
                 }
@@ -366,15 +433,25 @@ struct GameView: View {
                     .padding()
             }
         }
-        .fullScreenCover(isPresented: $gameState.complete) {
-            ResultsView(results: gameState.results, players: gameState.players) {
-                gameState.completelyResetGame()
+        .onReceive(gameState.$complete) { complete in
+            if complete {
+                if gameState.listener != nil {
+                    gameState.removeListener()
+                }
+                viewManager.resultsCopy = gameState.results
+                viewManager.playersCopy = gameState.players
+                viewManager.anyInactive = gameState.anyInactive
+                gameState.stopInactivityCheck()
+                viewManager.moveToView(.results)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
+                    self.gameState.deleteGameReference()
+                }
             }
         }
     }
     private func writeSentenceView(for player: String, rootPlayer: String, previousContent: String) -> some View {
         VStack {
-            if gameState.results[player]?.count ?? 0 > 0 {
+            if gameState.results[rootPlayer]?.count ?? 0 > 0 {
                 if let currentPlayerIndex = gameState.players.firstIndex(of: player) {
                     let previousPlayerIndex = (currentPlayerIndex - 1 + gameState.players.count) % gameState.players.count
                     let previousPlayer = gameState.players[previousPlayerIndex]
@@ -386,7 +463,7 @@ struct GameView: View {
                     Text("Describe this in one sentence!")
                 }
             } else  {
-                Text("Submit a sentence that can be drawn.")
+                Text("Submit a sentence that the next person can draw.")
                     .font(.title)
                     .padding()
             }
@@ -404,6 +481,7 @@ struct GameView: View {
                 }
             }
             Button(action: {
+                isButtonDisabled = true
                 gameState.submitTask(for: player, rootPlayer: rootPlayer, task: .writeSentence, content: inputText)
                 inputText = ""
             }) {
@@ -415,6 +493,10 @@ struct GameView: View {
                     .cornerRadius(10)
             }
             .padding()
+            .disabled(isButtonDisabled)
+        }
+        .onAppear {
+            isButtonDisabled = false
         }
     }
     private func drawPictureView(for player: String, rootPlayer: String, previousContent: String) -> some View {
@@ -450,6 +532,7 @@ struct GameView: View {
                 .cornerRadius(10)
                 Spacer()
                 Button(action: {
+                    isButtonDisabled = true
                     if let drawing = currentDrawing {
                         let drawingData = drawing.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
                         gameState.submitTask(for: player, rootPlayer: rootPlayer, task: .drawPicture, content: drawingData)
@@ -465,11 +548,15 @@ struct GameView: View {
                 }
             }
             .padding()
+            .disabled(isButtonDisabled)
             if let currentPlayerIndex = gameState.players.firstIndex(of: player) {
                 let nextPlayerIndex = (currentPlayerIndex + 1) % gameState.players.count
                 let nextPlayer = gameState.players[nextPlayerIndex]
                 Text("Pass your drawing to \(nextPlayer)!")
             }
+        }
+        .onAppear {
+            isButtonDisabled = false
         }
     }
 }
@@ -515,33 +602,27 @@ struct DrawingView: UIViewRepresentable {
 // ResultsView
 
 struct ResultsView: View {
-    var results: [String: [String]]
-    var players: [String]
+    @EnvironmentObject var viewManager: ViewManager
+    @ObservedObject var gameState: GameState
     @State private var currentPlayerIndex = 0
     @State private var currentElementIndex = 0
-    @State private var timerPublisher = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
-    @Environment(\.dismiss) private var dismiss
-    var onDismiss: () -> Void
+    @State private var revealedElements: [String: [String]] = [:]
+    @State private var isGameEnded = false
+    @State private var timerPublisher = Timer.publish(every: 6, on: .main, in: .common).autoconnect()
+    @State private var isButtonDisabled = false
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                Text("Game Results")
+                Text("Results")
                     .font(.largeTitle)
                     .padding()
-                if currentPlayerIndex < results.keys.sorted().count {
-                    let player = results.keys.sorted()[currentPlayerIndex]
-                    VStack(alignment: .center, spacing: 10) {
-                        if currentElementIndex == -1 {
-                            endGameView
-                        } else {
-                            playerStoryView(player: player)
-                        }
+                ForEach(viewManager.resultsCopy.keys.sorted(), id: \.self) { player in
+                    if revealedElements[player] != nil {
+                        playerStoryView(player: player)
                     }
-                    .preferredColorScheme(.light)
-                    .padding()
-                    .background(Color.white)
-                    .cornerRadius(15)
-                    .shadow(radius: 5)
+                }
+                if isGameEnded {
+                    endGameView
                 }
             }
             .padding()
@@ -553,19 +634,82 @@ struct ResultsView: View {
             timerPublisher.upstream.connect().cancel()
         }
     }
+    private func playerStoryView(player: String) -> some View {
+        VStack {
+            Text("\(player)'s Story")
+                .font(.title2)
+                .padding(.horizontal)
+            let playerIndex = viewManager.playersCopy.firstIndex(of: player)
+            ForEach(0..<(revealedElements[player]?.count ?? 0), id: \.self) { index in
+                if index % 2 == 0 {
+                    storyTextView(playerIndex: playerIndex ?? 0, index: index, player: player)
+                } else {
+                    storyImageView(playerIndex: playerIndex ?? 0, index: index, player: player)
+                }
+            }
+        }
+        .preferredColorScheme(.light)
+        .padding()
+        .background(Color.white)
+        .cornerRadius(15)
+        .shadow(radius: 5)
+    }
+    private func storyTextView(playerIndex: Int, index: Int, player: String) -> some View {
+        VStack {
+            if !(viewManager.anyInactive) {
+                let adjustedIndex = (playerIndex + index) % viewManager.playersCopy.count
+                Text("\(viewManager.playersCopy[adjustedIndex]):")
+                    .padding()
+            }
+            Text(revealedElements[player]![index])
+                .padding()
+                .background(Color.gray.opacity(0.2))
+                .cornerRadius(10)
+        }
+    }
+    private func storyImageView(playerIndex: Int, index: Int, player: String) -> some View {
+        VStack {
+            if !(viewManager.anyInactive) {
+                let adjustedIndex = (playerIndex + index) % viewManager.playersCopy.count
+                Text("\(viewManager.playersCopy[adjustedIndex]):")
+                    .padding()
+            }
+            imageView(for: revealedElements[player]![index])
+        }
+    }
     private var endGameView: some View {
         VStack {
-            Text("Thanks for playing!")
-                .font(.title)
-                .padding()
-            Image("davidgamecircle")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 250)
-                .padding()
             Button(action: {
-                onDismiss()
-                dismiss()
+                isButtonDisabled = true
+                gameState.completelyResetGame()
+                gameState.hostGame(pin: viewManager.pin, playerName: viewManager.playerName) { result in
+                    switch result {
+                    case 0:
+                        viewManager.moveToView(.waitingRoom)
+                    default:
+                        gameState.joinGame(pin: viewManager.pin, playerName: viewManager.playerName) { result in
+                            switch result {
+                            case 0:
+                                viewManager.moveToView(.waitingRoom)
+                            default:
+                                viewManager.resetGame()
+                            }
+                        }
+                    }
+                }
+            }) {
+                Text("Play Again")
+                    .font(.title)
+                    .padding()
+                    .background(Color.orange)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+            }
+            .padding()
+            .disabled(isButtonDisabled)
+            Button(action: {
+                gameState.completelyResetGame()
+                viewManager.resetGame()
             }) {
                 Text("Return to Home")
                     .font(.title)
@@ -575,26 +719,11 @@ struct ResultsView: View {
                     .cornerRadius(10)
             }
             .padding()
-        }
-    }
-    private func playerStoryView(player: String) -> some View {
-        VStack {
-            Text("\(player)'s Story")
-                .font(.title2)
-                .padding(.horizontal)
-            let playerIndex = players.firstIndex(of: player)
-            ForEach(0...currentElementIndex, id: \.self) { index in
-                if index % 2 == 0 {
-                    Text("\(players[(playerIndex! + index) % players.count]): \(results[player]![index])")
-                        .padding()
-                        .background(Color.gray.opacity(0.2))
-                        .cornerRadius(10)
-                } else {
-                    Text("\(players[(playerIndex! + index) % players.count]): ")
-                        .padding()
-                    imageView(for: results[player]![index])
-                }
-            }
+            Image("davidgamecircle")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 250)
+                .padding()
         }
     }
     private func imageView(for base64String: String) -> some View {
@@ -614,15 +743,21 @@ struct ResultsView: View {
         }
     }
     private func nextElement() {
-        if currentElementIndex < (results[results.keys.sorted()[currentPlayerIndex]]?.count ?? 0) - 1 {
+        let currentPlayer = viewManager.resultsCopy.keys.sorted()[currentPlayerIndex]
+        let playerResults = viewManager.resultsCopy[currentPlayer] ?? []
+        if currentElementIndex < playerResults.count {
+            if revealedElements[currentPlayer] == nil {
+                revealedElements[currentPlayer] = []
+            }
+            revealedElements[currentPlayer]!.append(playerResults[currentElementIndex])
             currentElementIndex += 1
         } else {
             currentElementIndex = 0
-            if currentPlayerIndex < results.keys.sorted().count - 1 {
+            if currentPlayerIndex < viewManager.resultsCopy.keys.sorted().count - 1 {
                 currentPlayerIndex += 1
             } else {
                 timerPublisher.upstream.connect().cancel()
-                currentElementIndex = -1
+                isGameEnded = true
             }
         }
     }
@@ -640,10 +775,13 @@ class GameState: ObservableObject {
     @Published var host: String = ""
     @Published var gamePIN: Int?
     @Published var complete = false
-    @Published var shouldReturnToHome = false
+    @Published var listener: ListenerRegistration?
+    @Published var lastActiveTimestamps: [String: Timestamp] = [:]
+    @Published var anyInactive: Bool = false
+    private var inactivityCheckTimer: Timer?
+    private let inactivityThreshold: TimeInterval = 300 // 5 minutes
     private var db = Firestore.firestore()
     private var gameDocRef: DocumentReference?
-    private var listener: ListenerRegistration?
     enum GameTask: String, Codable {
         case writeSentence
         case drawPicture
@@ -654,51 +792,56 @@ class GameState: ObservableObject {
         let rootPlayer: String
         let previousContent: String
     }
-    func hostGame(pin: Int, playerName: String) {
-        let updatedGamePIN = pin
-        let updatedHost = playerName
-        let initialGameState: [String: Any] = [
-            "gamePIN": updatedGamePIN,
-            "players": [updatedHost],
-            "isGameStarted": false,
-            "currentTasks": [updatedHost: ["taskType": GameTask.writeSentence.rawValue, "rootPlayer": updatedHost, "previousContent": ""]],
-            "results": [updatedHost: []],
-            "todoTasks": [updatedHost: []],
-            "waitingForInput": [updatedHost: false],
-            "hostPlayer": updatedHost,
-            "complete": false,
-            "shouldReturnToHome": false
-        ]
+    func hostGame(pin: Int, playerName: String, completion: @escaping (Int) -> Void) {
         self.gameDocRef = db.collection("games").document("\(pin)")
-        self.gameDocRef?.setData(initialGameState) { [weak self] error in
-            guard self != nil else { return }
-            if let error = error {
-                print("Error setting data: \(error)")
+        self.gameDocRef?.getDocument { [weak self] (document, error) in
+            guard let self = self else { return }
+            if let document = document, document.exists {
+                completion(1)
+                return
+            }
+            let initialGameState: [String: Any] = [
+                "gamePIN": pin,
+                "players": [playerName],
+                "isGameStarted": false,
+                "currentTasks": [playerName: ["taskType": GameTask.writeSentence.rawValue, "rootPlayer": playerName, "previousContent": ""]],
+                "results": [playerName: []],
+                "todoTasks": [playerName: []],
+                "waitingForInput": [playerName: false],
+                "hostPlayer": playerName,
+                "complete": false,
+                "lastActiveTimestamps": [playerName: Timestamp()],
+                "anyInactive": false,
+            ]
+            self.gameDocRef?.setData(initialGameState) { error in
+                if error != nil {
+                    completion(1)  // Error creating game
+                } else {
+                    self.listenForChanges()
+                    completion(0)  // Game successfully created
+                }
             }
         }
-        self.listenForChanges()
     }
     func joinGame(pin: Int, playerName: String, completion: @escaping (Int) -> Void) {
         self.gameDocRef = db.collection("games").document("\(pin)")
         self.gameDocRef?.getDocument { [weak self] (document, error) in
             guard let self = self, let document = document, document.exists else {
-                completion(1)
+                completion(1) // Game doesn't exist
                 return
             }
             if let players = document.data()?["players"] as? [String] {
-                // Check if the game is at max capacity
                 if players.count >= 10 {
                     completion(2)  // Game is at max capacity
                     return
                 }
-                // Check if a player with the same name is already in the game
                 if players.contains(playerName) {
                     completion(3)  // Player with the same name already exists
                     return
                 }
             }
             if let inProgress = document.data()?["isGameStarted"] as? Bool, inProgress {
-                completion(4) // Game is already in progress
+                completion(4) // Game is in progress
                 return
             }
             let updateData: [String: Any] = [
@@ -706,11 +849,11 @@ class GameState: ObservableObject {
                 "currentTasks.\(playerName)": ["taskType": GameTask.writeSentence.rawValue, "rootPlayer": playerName, "previousContent": ""],
                 "results.\(playerName)": [],
                 "todoTasks.\(playerName)": [],
-                "waitingForInput.\(playerName)": false
+                "waitingForInput.\(playerName)": false,
+                "lastActiveTimestamps.\(playerName)": Timestamp()
             ]
             self.gameDocRef?.updateData(updateData) { error in
-                if let error = error {
-                    print("Error updating data: \(error)")
+                if error != nil {
                     completion(1)
                 } else {
                     completion(0)
@@ -720,76 +863,80 @@ class GameState: ObservableObject {
         self.listenForChanges()
     }
     func startGame() {
-        // shuffle the players to randomize the order
         var updatedPlayers = self.players
-        updatedPlayers.shuffle()
+        updatedPlayers.shuffle() // Shuffle the order
         self.gameDocRef?.updateData([
             "players": updatedPlayers,
             "isGameStarted": true
-        ]) { error in
-            if let error = error {
-                print("Error updating data: \(error)")
-            }
+        ])
+        self.players.forEach { player in
+            updateUserActivity(for: player)
         }
+        self.startInactivityCheck()
     }
     func submitTask(for player: String, rootPlayer: String, task: GameTask, content: String) {
-        var updatedCurrentTasks = self.currentTasks
-        var updatedResults = self.results
-        var updatedTodoTasks = self.todoTasks
-        var updatedWaitingForInput = self.waitingForInput
-        var updatedComplete = self.complete
-        // update results
-        updatedResults[rootPlayer]?.append(content)
-        // if results[rootPlayer] is not done, relay the next task
-        if updatedResults[rootPlayer]?.count ?? 0 < 7 {
-            let nextTask: GameTask = (task == .writeSentence) ? .drawPicture : .writeSentence
-            // if nextPlayer is waiting, set nextTask as his current task
-            let nextPlayerIndex = (players.firstIndex(of: player)! + 1) % players.count
-            if waitingForInput[players[nextPlayerIndex]] == true {
-                updatedCurrentTasks[players[nextPlayerIndex]] = Task(taskType: nextTask, rootPlayer: rootPlayer, previousContent: content)
-                updatedWaitingForInput[players[nextPlayerIndex]] = false
-            }
-            // otherwise, add it to their todo
-            else {
-                updatedTodoTasks[players[nextPlayerIndex]]?.append(Task(taskType: nextTask, rootPlayer: rootPlayer, previousContent: content))
-            }
+        updateUserActivity(for: player)
+        guard let gameDocRef = self.gameDocRef else {
+            return
         }
-        // if results[rootPlayer] is done, the next task should be "waiting"
-        else {
-            let nextTask: GameTask = .waiting
-            // if nextPlayer is waiting, set nextTask as his current task
-            let nextPlayerIndex = (players.firstIndex(of: player)! + 1) % players.count
-            if waitingForInput[players[nextPlayerIndex]] == true {
-                updatedCurrentTasks[players[nextPlayerIndex]] = Task(taskType: nextTask, rootPlayer: "", previousContent: "")
+        db.runTransaction({ [self] (transaction, errorPointer) -> Any? in
+            do {
+                let gameDoc = try transaction.getDocument(gameDocRef)
+                // Read current state
+                guard var updatedCurrentTasks = gameDoc.data()?["currentTasks"] as? [String: [String: Any]],
+                      var updatedResults = gameDoc.data()?["results"] as? [String: [String]],
+                      var updatedTodoTasks = gameDoc.data()?["todoTasks"] as? [String: [[String: Any]]],
+                      var updatedWaitingForInput = gameDoc.data()?["waitingForInput"] as? [String: Bool],
+                      var updatedComplete = gameDoc.data()?["complete"] as? Bool else {
+                    throw NSError(domain: "GameStateError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid game state"])
+                }
+                let nextPlayerIndex = (self.players.firstIndex(of: player)! + 1) % players.count
+                // update results
+                updatedResults[rootPlayer]?.append(content)
+                // if results[rootPlayer] is not done, relay the next task
+                if updatedResults[rootPlayer]?.count ?? 0 < 7 {
+                    let nextTask: GameTask = (task == .writeSentence) ? .drawPicture : .writeSentence
+                    let nextTaskDict: [String: Any] = ["taskType": nextTask.rawValue, "rootPlayer": rootPlayer, "previousContent": content]
+                    // if nextPlayer is waiting, set nextTask as his current task
+                    if waitingForInput[players[nextPlayerIndex]] == true {
+                        updatedCurrentTasks[players[nextPlayerIndex]] = nextTaskDict
+                        updatedWaitingForInput[players[nextPlayerIndex]] = false
+                    }
+                    // otherwise, add it to their todo
+                    else {
+                        updatedTodoTasks[players[nextPlayerIndex]]?.append(nextTaskDict)
+                    }
+                }
+                // update player's todo
+                // if there is something to do, update player's current task
+                if !(updatedTodoTasks[player]?.isEmpty ?? true) {
+                    updatedCurrentTasks[player] = updatedTodoTasks[player]?.removeFirst()
+                }
+                // otherwise, set player's current task to waiting and update waitingForInput
+                else {
+                    updatedCurrentTasks[player] = ["taskType": GameTask.waiting.rawValue, "rootPlayer": "", "previousContent": ""]
+                    updatedWaitingForInput[player] = true
+                }
+                // if the game is over, indicate that
+                updatedComplete = updatedResults.values.allSatisfy { $0.count == 7 }
+                // Update document
+                transaction.updateData([
+                    "results": updatedResults,
+                    "currentTasks": updatedCurrentTasks,
+                    "todoTasks": updatedTodoTasks,
+                    "waitingForInput": updatedWaitingForInput,
+                    "complete": updatedComplete
+                ], forDocument: gameDocRef)
+                return nil
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
             }
-            // otherwise, add it to their todo
-            else {
-                updatedTodoTasks[players[nextPlayerIndex]]?.append(Task(taskType: nextTask, rootPlayer: "", previousContent: ""))
-            }
-        }
-        // update player's todo
-        // if there is something to do, update player's current task
-        if !(updatedTodoTasks[player]?.isEmpty ?? true) {
-            updatedCurrentTasks[player] = updatedTodoTasks[player]?.removeFirst()
-        }
-        // otherwise, set player's current task to waiting and update waitingForInput
-        else {
-            updatedCurrentTasks[player] = Task(taskType: .waiting, rootPlayer: "", previousContent: "")
-            updatedWaitingForInput[player] = true
-        }
-        // if the game is over, indicate that
-        updatedComplete = updatedResults.values.allSatisfy { $0.count == 7 }
-        // update database
-        let updateData: [String: Any] = [
-            "results": updatedResults.mapValues { $0 },
-            "currentTasks": updatedCurrentTasks.mapValues { ["taskType": $0.taskType.rawValue, "rootPlayer": $0.rootPlayer, "previousContent": $0.previousContent] },
-            "todoTasks": updatedTodoTasks.mapValues { $0.map { ["taskType": $0.taskType.rawValue, "rootPlayer": $0.rootPlayer, "previousContent": $0.previousContent] } },
-            "waitingForInput": updatedWaitingForInput,
-            "complete": updatedComplete
-        ]
-        self.gameDocRef?.updateData(updateData) { error in
+        }) { (_, error) in
             if let error = error {
-                print("Error updating data: \(error)")
+                print("Transaction failed: \(error)")
+            } else {
+                print("Transaction successfully committed.")
             }
         }
     }
@@ -800,7 +947,6 @@ class GameState: ObservableObject {
         listener?.remove()
         listener = gameDocRef?.addSnapshotListener { [weak self] documentSnapshot, error in
             guard let self = self, let document = documentSnapshot else {
-                print("Error fetching document: \(error?.localizedDescription ?? "Unknown error")")
                 return
             }
             DispatchQueue.main.async {
@@ -809,11 +955,12 @@ class GameState: ObservableObject {
         }
     }
     private func updateLocalState(with document: DocumentSnapshot) {
+        self.results = document.get("results") as? [String: [String]] ?? [:]
+        self.anyInactive = document.get("anyInactive") as? Bool ?? false
         self.complete = document.get("complete") as? Bool ?? false
         self.players = document.get("players") as? [String] ?? []
         self.isGameStarted = document.get("isGameStarted") as? Bool ?? false
         self.currentTasks = (document.get("currentTasks") as? [String: [String: Any]] ?? [:]).compactMapValues(self.decodeTask)
-        self.results = document.get("results") as? [String: [String]] ?? [:]
         self.todoTasks = (document.get("todoTasks") as? [String: [[String: Any]]] ?? [:]).mapValues { $0.compactMap { taskDict in
             guard let taskTypeString = taskDict["taskType"] as? String,
                   let taskType = GameTask(rawValue: taskTypeString),
@@ -825,6 +972,7 @@ class GameState: ObservableObject {
         }}
         self.waitingForInput = document.get("waitingForInput") as? [String: Bool] ?? [:]
         self.host = document.get("hostPlayer") as? String ?? ""
+        self.lastActiveTimestamps = document.get("lastActiveTimestamps") as? [String: Timestamp] ?? [:]
         self.objectWillChange.send()
     }
     private func decodeTask(from dictionary: [String: Any]) -> Task? {
@@ -850,8 +998,123 @@ class GameState: ObservableObject {
         self.complete = false
         self.gamePIN = nil
         self.gameDocRef = nil
+        self.anyInactive = false
+        self.lastActiveTimestamps = [:]
+        self.anyInactive = false
+        if self.listener != nil {
+            removeListener()
+        }
+    }
+    func removeListener() {
         self.listener?.remove()
         self.listener = nil
-        self.shouldReturnToHome = true
+    }
+    func deleteGameReference(){
+        if self.listener != nil {
+            removeListener()
+        }
+        self.gameDocRef?.delete { error in
+            if let error = error {
+                print("Error removing document: \(error)")
+            } else {
+                print("Document successfully removed.")
+            }
+        }
+    }
+    func updateUserActivity(for player: String) {
+        var updatedLastActiveTimestamps = self.lastActiveTimestamps
+        let currentTimestamp = Timestamp()
+        updatedLastActiveTimestamps[player] = currentTimestamp
+        gameDocRef?.updateData([
+            "lastActiveTimestamps.\(player)": currentTimestamp
+        ])
+    }
+    func startInactivityCheck() {
+        inactivityCheckTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            self?.checkForInactiveUsers()
+        }
+    }
+    func stopInactivityCheck() {
+        inactivityCheckTimer?.invalidate()
+        inactivityCheckTimer = nil
+    }
+    private func checkForInactiveUsers() {
+        let currentTimestamp = Timestamp()
+        for (player, lastActiveTime) in lastActiveTimestamps {
+            if currentTasks[player]?.taskType == .waiting {
+                updateUserActivity(for: player)
+            }
+            if currentTimestamp.seconds - lastActiveTime.seconds > Int64(inactivityThreshold) {
+                handleInactiveUser(player)
+            }
+        }
+    }
+    private func handleInactiveUser(_ inactivePlayer: String) {
+        guard let gameDocRef = self.gameDocRef else {
+            return
+        }
+        db.runTransaction({ (transaction, errorPointer) -> Any? in
+            do {
+                let gameDoc = try transaction.getDocument(gameDocRef)
+                // Read current state
+                guard var updatedPlayers = gameDoc.data()?["players"] as? [String],
+                      var updatedCurrentTasks = gameDoc.data()?["currentTasks"] as? [String: [String: Any]],
+                      var updatedTodoTasks = gameDoc.data()?["todoTasks"] as? [String: [[String: Any]]],
+                      var updatedWaitingForInput = gameDoc.data()?["waitingForInput"] as? [String: Bool],
+                      var updatedResults = gameDoc.data()?["results"] as? [String: [String]],
+                      var updatedLastActiveTimestamps = gameDoc.data()?["lastActiveTimestamps"] as? [String: Timestamp],
+                      var updatedComplete = gameDoc.data()?["complete"] as? Bool else {
+                    throw NSError(domain: "GameStateError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid game state"])
+                }
+                let inactiveTask = updatedCurrentTasks[inactivePlayer]
+                let nextPlayerIndex = ((self.players.firstIndex(of: inactivePlayer) ?? 0) + 1) % self.players.count
+                if self.waitingForInput[self.players[nextPlayerIndex]] ?? false {
+                    updatedCurrentTasks[self.players[nextPlayerIndex]] = inactiveTask
+                    if !self.waitingForInput[inactivePlayer]! {
+                        updatedWaitingForInput[self.players[nextPlayerIndex]] = false
+                    }
+                } else if !self.waitingForInput[inactivePlayer]! {
+                    updatedTodoTasks[self.players[nextPlayerIndex]]?.append(inactiveTask!)
+                }
+                while !(updatedTodoTasks[inactivePlayer]?.isEmpty ?? true) {
+                    let fromToDo = updatedTodoTasks[inactivePlayer]?.removeFirst()
+                    if updatedWaitingForInput[self.players[nextPlayerIndex]] ?? true {
+                        updatedCurrentTasks[self.players[nextPlayerIndex]] = fromToDo
+                        updatedWaitingForInput[self.players[nextPlayerIndex]] = false
+                    } else {
+                        updatedTodoTasks[self.players[nextPlayerIndex]]!.append(fromToDo!)
+                    }
+                }
+                // Remove the inactive player
+                updatedPlayers.removeAll { $0 == inactivePlayer }
+                updatedCurrentTasks.removeValue(forKey: inactivePlayer)
+                updatedResults.removeValue(forKey: inactivePlayer)
+                updatedTodoTasks.removeValue(forKey: inactivePlayer)
+                updatedWaitingForInput.removeValue(forKey: inactivePlayer)
+                updatedLastActiveTimestamps.removeValue(forKey: inactivePlayer)
+                updatedComplete = updatedResults.values.allSatisfy { $0.count == 7 }
+                // Update document
+                transaction.updateData([
+                    "players": updatedPlayers,
+                    "currentTasks": updatedCurrentTasks,
+                    "results": updatedResults,
+                    "todoTasks": updatedTodoTasks,
+                    "waitingForInput": updatedWaitingForInput,
+                    "lastActiveTimestamps": updatedLastActiveTimestamps,
+                    "anyInactive": true,
+                    "updatedComplete": updatedComplete
+                ], forDocument: gameDocRef)
+                return nil
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
+            }
+        }) { (_, error) in
+            if let error = error {
+                print("Transaction failed: \(error)")
+            } else {
+                print("Inactive user \(inactivePlayer) has been removed from the game.")
+            }
+        }
     }
 }
