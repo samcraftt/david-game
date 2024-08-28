@@ -58,30 +58,68 @@ class UserDefaultsManager {
 // BannerView
 
 struct BannerView: UIViewRepresentable {
+    @Binding var adLoaded: Bool
     func makeUIView(context: Context) -> GADBannerView {
-        let banner = GADBannerView(adSize: GADAdSizeBanner)
-        banner.adUnitID = "ADMOB_BANNER_ID"
+        let banner = GADBannerView()
+        banner.adUnitID = "ca-app-pub-3940256099942544/2435281174"
         banner.rootViewController = getRootViewController()
+        banner.delegate = context.coordinator
+        return banner
+    }
+    func updateUIView(_ bannerView: GADBannerView, context: Context) {
+        let frame = { () -> CGRect in
+            if let window = getRootViewController()?.view.window {
+                return window.frame
+            } else {
+                return UIScreen.main.bounds
+            }
+        }()
+        let viewWidth = frame.size.width
+        // Adaptive banner size
+        bannerView.adSize = GADCurrentOrientationAnchoredAdaptiveBannerAdSizeWithWidth(viewWidth)
+        loadAd(for: bannerView)
+    }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    private func loadAd(for bannerView: GADBannerView) {
         if #available(iOS 14, *) {
             ATTrackingManager.requestTrackingAuthorization { status in
                 DispatchQueue.main.async {
                     let request = GADRequest()
-                    banner.load(request)
+                    // General ads if tracking is not authorized
+                    if status != .authorized {
+                        let extras = GADExtras()
+                        extras.additionalParameters = ["npa": "1"]
+                        request.register(extras)
+                    }
+                    bannerView.load(request)
                 }
             }
         } else {
             let request = GADRequest()
-            banner.load(request)
+            bannerView.load(request)
         }
-        return banner
     }
-    func updateUIView(_ uiView: GADBannerView, context: Context) {}
     private func getRootViewController() -> UIViewController? {
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let window = windowScene.windows.first(where: { $0.isKeyWindow }) else {
             return nil
         }
         return window.rootViewController
+    }
+    class Coordinator: NSObject, GADBannerViewDelegate {
+        var parent: BannerView
+        init(_ parent: BannerView) {
+            self.parent = parent
+        }
+        func bannerViewDidReceiveAd(_ bannerView: GADBannerView) {
+            parent.adLoaded = true
+        }
+        func bannerView(_ bannerView: GADBannerView, didFailToReceiveAdWithError error: Error) {
+            print("Failed to load ad: \(error)")
+            parent.adLoaded = false
+        }
     }
 }
 
@@ -161,8 +199,11 @@ struct ParentView: View {
 struct HomeView: View {
     @EnvironmentObject var viewManager: ViewManager
     @ObservedObject var gameState: GameState
+    @State private var adLoaded = false
     var body: some View {
         VStack {
+            Text("")
+            Spacer()
             Text("The David Game")
                 .font(.largeTitle)
                 .padding()
@@ -193,9 +234,14 @@ struct HomeView: View {
                     .cornerRadius(10)
             }
             .padding()
-            BannerView()
+            Spacer()
+            Text("For smooth gameplay, all players should update the David Game to its latest version on the App Store.")
+                .padding()
+            BannerView(adLoaded: $adLoaded)
+                .frame(maxWidth: .infinity)
                 .frame(height: 50)
                 .background(Color.gray.opacity(0.2))
+                .opacity(adLoaded ? 1 : 0)
         }
     }
 }
@@ -350,6 +396,8 @@ struct WaitingRoomView: View {
     @EnvironmentObject var viewManager: ViewManager
     @ObservedObject var gameState: GameState
     @State private var isButtonDisabled = false
+    @State private var showCancelAlert = false
+    @State private var showLeaveAlert = false
     var body: some View {
         VStack {
             Text("Waiting Room")
@@ -360,7 +408,7 @@ struct WaitingRoomView: View {
             List(gameState.players, id: \.self) { player in
                 Text(player)
             }
-            if viewManager.playerName == gameState.host && gameState.players.count >= 2 && gameState.players.count <= 10 {
+            if viewManager.playerName == gameState.host && gameState.players.count >= 2 && gameState.players.count <= 15 {
                 Button(action: {
                     isButtonDisabled = true
                     gameState.startGame()
@@ -368,26 +416,83 @@ struct WaitingRoomView: View {
                     Text("Start Game")
                         .font(.title)
                         .padding()
-                        .background(Color.red)
+                        .background(Color.purple)
                         .foregroundColor(.white)
                         .cornerRadius(10)
                 }
                 .padding()
                 .disabled(isButtonDisabled)
-            } else if gameState.players.count < 10 {
+            } else if gameState.players.count < 15 {
                 Text("Waiting for more players...")
                     .font(.title2)
                     .padding()
             }
-            if gameState.players.count == 10 {
-                Text("10 Players - Game at capacity.")
+            if gameState.players.count == 15 {
+                Text("15 Players - Game at capacity.")
                     .font(.title2)
                     .padding()
+            }
+            if viewManager.playerName == gameState.host {
+                Button(action: {
+                    showCancelAlert = true
+                }) {
+                    Text("Cancel Game")
+                        .font(.title)
+                        .padding()
+                        .background(Color.red)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .padding()
+                .alert(isPresented: $showCancelAlert) {
+                    Alert(
+                        title: Text("Cancel Game"),
+                        message: Text("Are you sure you want to cancel the game? This will send all players back to the home screen."),
+                        primaryButton: .destructive(Text("Cancel Game")) {
+                            gameState.cancelGame()
+                        },
+                        secondaryButton: .cancel(Text("Back to Game"))
+                    )
+                }
+            } else {
+                Button(action: {
+                    showLeaveAlert = true
+                }) {
+                    Text("Leave Game")
+                        .font(.title)
+                        .padding()
+                        .background(Color.red)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .padding()
+                .alert(isPresented: $showLeaveAlert) {
+                    Alert(
+                        title: Text("Leave Game"),
+                        message: Text("Are you sure you want to leave the game?"),
+                        primaryButton: .destructive(Text("Leave Game")) {
+                            gameState.leaveGame(playerName: viewManager.playerName)
+                            viewManager.resetGame()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                                gameState.completelyResetGame()
+                            }
+                        },
+                        secondaryButton: .cancel(Text("Back to Game"))
+                    )
+                }
             }
         }
         .onReceive(gameState.$isGameStarted) { started in
             if started {
                 viewManager.moveToView(.game)
+            }
+        }
+        .onReceive(gameState.$cancelled) { cancelled in
+            if cancelled {
+                viewManager.resetGame()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    gameState.completelyResetGame()
+                }
             }
         }
     }
@@ -610,22 +715,45 @@ struct ResultsView: View {
     @State private var isGameEnded = false
     @State private var timerPublisher = Timer.publish(every: 6, on: .main, in: .common).autoconnect()
     @State private var isButtonDisabled = false
+    @State private var scrollProxy: ScrollViewProxy?
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                Text("Results")
-                    .font(.largeTitle)
-                    .padding()
-                ForEach(viewManager.resultsCopy.keys.sorted(), id: \.self) { player in
-                    if revealedElements[player] != nil {
-                        playerStoryView(player: player)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 20) {
+                    Text("The results are in...")
+                        .font(.largeTitle)
+                        .padding()
+                    ForEach(viewManager.resultsCopy.keys.sorted(), id: \.self) { player in
+                        if revealedElements[player] != nil {
+                            playerStoryView(player: player)
+                        }
+                    }
+                    if isGameEnded {
+                        endGameView
+                        Color.clear.frame(height: 1).id("bottomID")
+                    } else {
+                        ThreeDotsAnimation()
+                            .id("bottomID")
+                            .frame(height: 40)
+                            .padding(.bottom)
+
                     }
                 }
-                if isGameEnded {
-                    endGameView
+                .padding()
+            }
+            .onChange(of: revealedElements) { _, _ in
+                withAnimation {
+                    proxy.scrollTo("bottomID", anchor: .bottom)
                 }
             }
-            .padding()
+            .onAppear {
+                scrollProxy = proxy
+            }
+            .onChange(of: isGameEnded) {
+                withAnimation {
+                    proxy.scrollTo("bottomID", anchor: .bottom)
+                }
+            }
         }
         .onReceive(timerPublisher) { _ in
             nextElement()
@@ -751,13 +879,43 @@ struct ResultsView: View {
             }
             revealedElements[currentPlayer]!.append(playerResults[currentElementIndex])
             currentElementIndex += 1
+            // Scroll to bottom after adding new element
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation {
+                    scrollProxy?.scrollTo("bottomID", anchor: .bottom)
+                }
+            }
         } else {
             currentElementIndex = 0
             if currentPlayerIndex < viewManager.resultsCopy.keys.sorted().count - 1 {
                 currentPlayerIndex += 1
+                nextElement()
             } else {
                 timerPublisher.upstream.connect().cancel()
                 isGameEnded = true
+            }
+        }
+    }
+}
+
+// ThreeDotsAnimation
+
+struct ThreeDotsAnimation: View {
+    @State private var animationState = 0
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3) { index in
+                Circle()
+                    .fill(Color.gray)
+                    .frame(width: 8, height: 8)
+                    .opacity(animationState == index ? 1 : 0.3)
+            }
+        }
+        .onAppear {
+            Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+                withAnimation {
+                    animationState = (animationState + 1) % 3
+                }
             }
         }
     }
@@ -778,6 +936,7 @@ class GameState: ObservableObject {
     @Published var listener: ListenerRegistration?
     @Published var lastActiveTimestamps: [String: Timestamp] = [:]
     @Published var anyInactive: Bool = false
+    @Published var cancelled: Bool = false
     private var inactivityCheckTimer: Timer?
     private let inactivityThreshold: TimeInterval = 300 // 5 minutes
     private var db = Firestore.firestore()
@@ -812,6 +971,7 @@ class GameState: ObservableObject {
                 "complete": false,
                 "lastActiveTimestamps": [playerName: Timestamp()],
                 "anyInactive": false,
+                "cancelled": false,
             ]
             self.gameDocRef?.setData(initialGameState) { error in
                 if error != nil {
@@ -831,7 +991,7 @@ class GameState: ObservableObject {
                 return
             }
             if let players = document.data()?["players"] as? [String] {
-                if players.count >= 10 {
+                if players.count >= 15 {
                     completion(2)  // Game is at max capacity
                     return
                 }
@@ -973,6 +1133,7 @@ class GameState: ObservableObject {
         self.waitingForInput = document.get("waitingForInput") as? [String: Bool] ?? [:]
         self.host = document.get("hostPlayer") as? String ?? ""
         self.lastActiveTimestamps = document.get("lastActiveTimestamps") as? [String: Timestamp] ?? [:]
+        self.cancelled = document.get("cancelled") as? Bool ?? false
         self.objectWillChange.send()
     }
     private func decodeTask(from dictionary: [String: Any]) -> Task? {
@@ -1001,6 +1162,7 @@ class GameState: ObservableObject {
         self.anyInactive = false
         self.lastActiveTimestamps = [:]
         self.anyInactive = false
+        self.cancelled = false
         if self.listener != nil {
             removeListener()
         }
@@ -1114,6 +1276,38 @@ class GameState: ObservableObject {
                 print("Transaction failed: \(error)")
             } else {
                 print("Inactive user \(inactivePlayer) has been removed from the game.")
+            }
+        }
+    }
+    func cancelGame() {
+        guard let gameDocRef = self.gameDocRef else {
+            return
+        }
+        gameDocRef.updateData(["cancelled": true]) { error in
+            if let error = error {
+                print("Error updating document: \(error)")
+            } else {
+                print("Game cancelled successfully")
+            }
+        }
+    }
+    func leaveGame(playerName: String) {
+        guard let gameDocRef = self.gameDocRef else {
+            return
+        }
+        // Remove the player from the game
+        gameDocRef.updateData([
+            "players": FieldValue.arrayRemove([playerName]),
+            "currentTasks.\(playerName)": FieldValue.delete(),
+            "results.\(playerName)": FieldValue.delete(),
+            "todoTasks.\(playerName)": FieldValue.delete(),
+            "waitingForInput.\(playerName)": FieldValue.delete(),
+            "lastActiveTimestamps.\(playerName)": FieldValue.delete()
+        ]) { error in
+            if let error = error {
+                print("Error removing player from game: \(error)")
+            } else {
+                print("Player \(playerName) has left the game.")
             }
         }
     }
