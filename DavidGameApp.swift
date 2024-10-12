@@ -61,7 +61,7 @@ struct BannerView: UIViewRepresentable {
     @Binding var adLoaded: Bool
     func makeUIView(context: Context) -> GADBannerView {
         let banner = GADBannerView()
-        banner.adUnitID = "ca-app-pub-3940256099942544/2435281174"
+        banner.adUnitID = "ca-app-pub-3940256099942544/2435281174" // this is a test banner ID, replace with actual ID in deployment
         banner.rootViewController = getRootViewController()
         banner.delegate = context.coordinator
         return banner
@@ -202,7 +202,6 @@ struct HomeView: View {
     @State private var adLoaded = false
     var body: some View {
         VStack {
-            Text("")
             Spacer()
             Text("The David Game")
                 .font(.largeTitle)
@@ -213,30 +212,31 @@ struct HomeView: View {
                 .frame(height: 250)
                 .padding()
             Button(action: {
-                viewManager.moveToView(.host)
+                viewManager.moveToView(.join)
             }) {
-                Text("Host Game")
+                Text("Join Game")
                     .font(.title)
                     .padding()
+                    .frame(minWidth: 300)
                     .background(Color.blue)
                     .foregroundColor(.white)
                     .cornerRadius(10)
             }
             .padding()
             Button(action: {
-                viewManager.moveToView(.join)
+                viewManager.moveToView(.host)
             }) {
-                Text("Join Game")
+                Text("Host Game")
                     .font(.title)
                     .padding()
-                    .background(Color.green)
+                    .frame(minWidth: 300)
+                    .background(Color.red)
                     .foregroundColor(.white)
                     .cornerRadius(10)
+                    
             }
             .padding()
             Spacer()
-            Text("For smooth gameplay, all players should update the David Game to its latest version on the App Store.")
-                .padding()
             BannerView(adLoaded: $adLoaded)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
@@ -244,6 +244,9 @@ struct HomeView: View {
                 .opacity(adLoaded ? 1 : 0)
         }
     }
+}
+#Preview {
+    HomeView(gameState: GameState())
 }
 
 // HostGameView
@@ -258,14 +261,25 @@ struct HostGameView: View {
     @State private var isButtonDisabled = false
     var body: some View {
         VStack {
-            Button(action: {
-                viewManager.moveToView(.home)
-            }) {
-                Text("Return to Home")
+            HStack {
+                Spacer()
+                Button(action: {
+                    viewManager.moveToView(.home)
+                }) {
+                    VStack {
+                        Image(systemName: "house")
+                            .scaledToFit()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                        Text("Home")
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                    }
                     .padding()
-                    .background(Color.purple)
-                    .foregroundColor(.white)
+                    .background(Color.blue)
                     .cornerRadius(10)
+                }
+                .padding()
             }
             .padding()
             Spacer()
@@ -294,8 +308,9 @@ struct HostGameView: View {
                 isButtonDisabled = false
             }) {
                 Text("Create Waiting Room")
-                    .font(.title)
+                    .font(.title2)
                     .padding()
+                    .frame(minWidth: 300)
                     .background(Color.red)
                     .foregroundColor(.white)
                     .cornerRadius(10)
@@ -312,6 +327,9 @@ struct HostGameView: View {
         showError = true
     }
 }
+#Preview {
+    HostGameView(gameState: GameState())
+}
 
 // JoinGameView
 
@@ -325,14 +343,25 @@ struct JoinGameView: View {
     @State private var isButtonDisabled = false
     var body: some View {
         VStack {
-            Button(action: {
-                viewManager.moveToView(.home)
-            }) {
-                Text("Return to Home")
+            HStack {
+                Spacer()
+                Button(action: {
+                    viewManager.moveToView(.home)
+                }) {
+                    VStack {
+                        Image(systemName: "house")
+                            .scaledToFit()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                        Text("Home")
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                    }
                     .padding()
-                    .background(Color.purple)
-                    .foregroundColor(.white)
+                    .background(Color.blue)
                     .cornerRadius(10)
+                }
+                .padding()
             }
             .padding()
             Spacer()
@@ -371,9 +400,10 @@ struct JoinGameView: View {
                 isButtonDisabled = false
             }) {
                 Text("Join")
-                    .font(.title)
+                    .font(.title2)
                     .padding()
-                    .background(Color.blue)
+                    .frame(minWidth: 300)
+                    .background(Color.red)
                     .foregroundColor(.white)
                     .cornerRadius(10)
             }
@@ -388,6 +418,9 @@ struct JoinGameView: View {
         errorMessage = message
         showError = true
     }
+}
+#Preview {
+    JoinGameView(gameState: GameState())
 }
 
 // WaitingRoomView
@@ -404,6 +437,7 @@ struct WaitingRoomView: View {
                 .font(.largeTitle)
                 .padding()
             Text("Game PIN: \(String(format: "%04d", viewManager.pin))")
+                .font(.title2)
                 .padding()
             List(gameState.players, id: \.self) { player in
                 Text(player)
@@ -414,9 +448,10 @@ struct WaitingRoomView: View {
                     gameState.startGame()
                 }) {
                     Text("Start Game")
-                        .font(.title)
+                        .font(.title2)
                         .padding()
-                        .background(Color.purple)
+                        .frame(minWidth: 300)
+                        .background(Color.blue)
                         .foregroundColor(.white)
                         .cornerRadius(10)
                 }
@@ -437,8 +472,9 @@ struct WaitingRoomView: View {
                     showCancelAlert = true
                 }) {
                     Text("Cancel Game")
-                        .font(.title)
+                        .font(.title2)
                         .padding()
+                        .frame(minWidth: 300)
                         .background(Color.red)
                         .foregroundColor(.white)
                         .cornerRadius(10)
@@ -459,8 +495,9 @@ struct WaitingRoomView: View {
                     showLeaveAlert = true
                 }) {
                     Text("Leave Game")
-                        .font(.title)
+                        .font(.title2)
                         .padding()
+                        .frame(minWidth: 300)
                         .background(Color.red)
                         .foregroundColor(.white)
                         .cornerRadius(10)
@@ -497,6 +534,10 @@ struct WaitingRoomView: View {
         }
     }
 }
+#Preview {
+    WaitingRoomView(gameState: GameState())
+        .environmentObject(ViewManager()) // Ensure that ViewManager is passed as an environment object
+}
 
 // GameView
 
@@ -520,21 +561,30 @@ struct GameView: View {
                         let previousPlayerIndex = (currentPlayerIndex - 1 + gameState.players.count) % gameState.players.count
                         let previousPlayer = gameState.players[previousPlayerIndex]
                         if gameState.currentTasks[previousPlayer]?.taskType != .waiting {
-                            Text("Waiting for \(previousPlayer) to complete their task...")
+                            Text("Waiting for \(previousPlayer) to complete their task.")
                                 .font(.title)
+                                .padding()
+                            ThreeDotsAnimation()
+                                .frame(height: 40)
                                 .padding()
                         } else {
-                            Text("Waiting for other players...")
+                            Text("Waiting for other players.")
                                 .font(.title)
                                 .padding()
-                            Text("Don't tell \(previousPlayer) to hurry up, because they're also waiting...")
+                            Text("Don't tell \(previousPlayer) to hurry up, because they're also waiting.")
+                                .padding()
+                            ThreeDotsAnimation()
+                                .frame(height: 40)
                                 .padding()
                             }
                         }
                 }
             } else {
-                Text("Waiting for other players...")
+                Text("Waiting for other players.")
                     .font(.title)
+                    .padding()
+                ThreeDotsAnimation()
+                    .frame(height: 40)
                     .padding()
             }
         }
@@ -556,49 +606,55 @@ struct GameView: View {
     }
     private func writeSentenceView(for player: String, rootPlayer: String, previousContent: String) -> some View {
         VStack {
-            if gameState.results[rootPlayer]?.count ?? 0 > 0 {
+            if isButtonDisabled {
+                Text("Submitted!")
+                    .font(.title2)
+                    .padding()
+            } else {
+                if gameState.results[rootPlayer]?.count ?? 0 > 0 {
+                    if let currentPlayerIndex = gameState.players.firstIndex(of: player) {
+                        let previousPlayerIndex = (currentPlayerIndex - 1 + gameState.players.count) % gameState.players.count
+                        let previousPlayer = gameState.players[previousPlayerIndex]
+                        Text("\(previousPlayer)'s drawing:")
+                        Image(uiImage: UIImage(data: Data(base64Encoded: previousContent)!)!)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 200)
+                        Text("Describe this in one sentence!")
+                    }
+                } else  {
+                    Text("Submit a sentence that the next person can draw.")
+                        .font(.title)
+                        .padding()
+                }
+                TextField("Enter your sentence", text: $inputText)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .font(.title)
+                    .padding()
                 if let currentPlayerIndex = gameState.players.firstIndex(of: player) {
-                    let previousPlayerIndex = (currentPlayerIndex - 1 + gameState.players.count) % gameState.players.count
-                    let previousPlayer = gameState.players[previousPlayerIndex]
-                    Text("\(previousPlayer)'s drawing:")
-                    Image(uiImage: UIImage(data: Data(base64Encoded: previousContent)!)!)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(height: 200)
-                    Text("Describe this in one sentence!")
+                    let nextPlayerIndex = (currentPlayerIndex + 1) % gameState.players.count
+                    let nextPlayer = gameState.players[nextPlayerIndex]
+                    if gameState.results[rootPlayer]?.count == 6 {
+                        Text("Submit this sentence to complete \(rootPlayer)'s story!")
+                    } else {
+                        Text("Pass your sentence to \(nextPlayer)!")
+                    }
                 }
-            } else  {
-                Text("Submit a sentence that the next person can draw.")
-                    .font(.title)
-                    .padding()
-            }
-            TextField("Enter your sentence", text: $inputText)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-                .font(.title)
+                Button(action: {
+                    isButtonDisabled = true
+                    gameState.submitTask(for: player, rootPlayer: rootPlayer, task: .writeSentence, content: inputText)
+                    inputText = ""
+                }) {
+                    Text("Submit")
+                        .font(.title2)
+                        .padding()
+                        .background(Color.red)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
                 .padding()
-            if let currentPlayerIndex = gameState.players.firstIndex(of: player) {
-                let nextPlayerIndex = (currentPlayerIndex + 1) % gameState.players.count
-                let nextPlayer = gameState.players[nextPlayerIndex]
-                if gameState.results[rootPlayer]?.count == 6 {
-                    Text("Submit this sentence to complete \(rootPlayer)'s story!")
-                } else {
-                    Text("Pass your sentence to \(nextPlayer)!")
-                }
+                .disabled(isButtonDisabled)
             }
-            Button(action: {
-                isButtonDisabled = true
-                gameState.submitTask(for: player, rootPlayer: rootPlayer, task: .writeSentence, content: inputText)
-                inputText = ""
-            }) {
-                Text("Submit")
-                    .font(.title)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-            }
-            .padding()
-            .disabled(isButtonDisabled)
         }
         .onAppear {
             isButtonDisabled = false
@@ -606,64 +662,77 @@ struct GameView: View {
     }
     private func drawPictureView(for player: String, rootPlayer: String, previousContent: String) -> some View {
         VStack {
-            if let previousContent = gameState.getPreviousContent(for: rootPlayer) {
-                if let currentPlayerIndex = gameState.players.firstIndex(of: player) {
-                    let previousPlayerIndex = (currentPlayerIndex - 1 + gameState.players.count) % gameState.players.count
-                    let previousPlayer = gameState.players[previousPlayerIndex]
-                    Text("\(previousPlayer)'s sentence:")
-                    ScrollView {
-                        Text(previousContent)
+            if isButtonDisabled {
+                Text("Submitted!")
+                    .font(.title2)
+                    .padding()
+            } else {
+                if let previousContent = gameState.getPreviousContent(for: rootPlayer) {
+                    if let currentPlayerIndex = gameState.players.firstIndex(of: player) {
+                        let previousPlayerIndex = (currentPlayerIndex - 1 + gameState.players.count) % gameState.players.count
+                        let previousPlayer = gameState.players[previousPlayerIndex]
+                        Text("\(previousPlayer)'s sentence:")
+                        ScrollView {
+                            Text(previousContent)
+                                .font(.title2)
+                                .padding()
+                        }
+                        .frame(height: 100)
+                        Text("Draw this sentence. No words allowed!")
+                    }
+                }
+                let drawingView = DrawingView(currentDrawing: $currentDrawing, canvasView: canvasView)
+                drawingView
+                    .frame(height: 300)
+                    .padding()
+                    .border(Color.gray, width: 2)
+                HStack {
+                    Button(action: {
+                        drawingView.undo()
+                    }) {
+                        Image(systemName: "arrow.uturn.backward")
+                        Text("Undo")
+                            .font(.title2)
+                    }
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    Spacer()
+                    Button(action: {
+                        isButtonDisabled = true
+                        if let drawing = currentDrawing {
+                            let drawingData = drawing.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
+                            gameState.submitTask(for: player, rootPlayer: rootPlayer, task: .drawPicture, content: drawingData)
+                            canvasView.drawing = PKDrawing()
+                        }
+                    }) {
+                        Text("Submit")
                             .font(.title2)
                             .padding()
+                            .background(Color.red)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
                     }
-                    .frame(height: 100)
-                    Text("Draw this sentence. No words allowed!")
-                }
-            }
-            let drawingView = DrawingView(currentDrawing: $currentDrawing, canvasView: canvasView)
-            drawingView
-                .frame(height: 300)
-                .padding()
-                .border(Color.gray, width: 2)
-            HStack {
-                Button(action: {
-                    drawingView.undo()
-                }) {
-                    Image(systemName: "arrow.uturn.backward")
-                    Text("Undo")
                 }
                 .padding()
-                .background(Color.gray.opacity(0.2))
-                .cornerRadius(10)
-                Spacer()
-                Button(action: {
-                    isButtonDisabled = true
-                    if let drawing = currentDrawing {
-                        let drawingData = drawing.jpegData(compressionQuality: 0.8)?.base64EncodedString() ?? ""
-                        gameState.submitTask(for: player, rootPlayer: rootPlayer, task: .drawPicture, content: drawingData)
-                        canvasView.drawing = PKDrawing()
-                    }
-                }) {
-                    Text("Submit")
-                        .font(.title)
-                        .padding()
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
+                .disabled(isButtonDisabled)
+                // here
+                if let currentPlayerIndex = gameState.players.firstIndex(of: player) {
+                    let nextPlayerIndex = (currentPlayerIndex + 1) % gameState.players.count
+                    let nextPlayer = gameState.players[nextPlayerIndex]
+                    Text("Pass your drawing to \(nextPlayer)!")
                 }
-            }
-            .padding()
-            .disabled(isButtonDisabled)
-            if let currentPlayerIndex = gameState.players.firstIndex(of: player) {
-                let nextPlayerIndex = (currentPlayerIndex + 1) % gameState.players.count
-                let nextPlayer = gameState.players[nextPlayerIndex]
-                Text("Pass your drawing to \(nextPlayer)!")
             }
         }
         .onAppear {
             isButtonDisabled = false
         }
     }
+}
+#Preview {
+    GameView(gameState: GameState())
+        .environmentObject(ViewManager())
 }
 
 // DrawingView
@@ -827,9 +896,10 @@ struct ResultsView: View {
                 }
             }) {
                 Text("Play Again")
-                    .font(.title)
+                    .font(.title2)
                     .padding()
-                    .background(Color.orange)
+                    .frame(minWidth: 300)
+                    .background(Color.blue)
                     .foregroundColor(.white)
                     .cornerRadius(10)
             }
@@ -840,9 +910,10 @@ struct ResultsView: View {
                 viewManager.resetGame()
             }) {
                 Text("Return to Home")
-                    .font(.title)
+                    .font(.title2)
                     .padding()
-                    .background(Color.blue)
+                    .frame(minWidth: 300)
+                    .background(Color.red)
                     .foregroundColor(.white)
                     .cornerRadius(10)
             }
@@ -896,6 +967,10 @@ struct ResultsView: View {
             }
         }
     }
+}
+#Preview {
+    ResultsView(gameState: GameState())
+        .environmentObject(ViewManager())
 }
 
 // ThreeDotsAnimation
